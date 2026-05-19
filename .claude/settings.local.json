@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"C:\\\\Users\\\\micro\\\\Desktop\\\\folder\"; $files = @\\(\"index.js\",\"src/lib/parser.js\",\"src/lib/resolver.js\",\"src/lib/walker.js\",\"src/lib/git.js\",\"src/tools/analyzeFeature.js\",\"src/tools/mapDependencies.js\"\\); foreach \\($f in $files\\) { $result = node --check $f 2>&1; if \\($result\\) { Write-Output \"ERRORE in $f`: $result\" } else { Write-Output \"OK: $f\" } })"
+    ]
+  }
+}
