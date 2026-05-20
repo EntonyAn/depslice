@@ -119,7 +119,7 @@ body {
 #graph-wrap::-webkit-scrollbar { width:6px; height:6px; }
 #graph-wrap::-webkit-scrollbar-track  { background:transparent; }
 #graph-wrap::-webkit-scrollbar-thumb  { background:#21262d; border-radius:3px; }
-#graph-svg { display:block; }
+#graph-svg { display:block; overflow:visible; }
 
 /* ── SVG elements ── */
 .edge { fill:none; stroke-width:1.5; opacity:0.45; transition:opacity .25s ease, stroke-width .2s ease; }
@@ -566,6 +566,7 @@ function startDrag(e, n, gEl) {
     n.py = origPy + dy;
     gEl.setAttribute("transform", "translate("+n.px+","+(n.py-NH/2)+")");
     redrawEdges(n.id);
+    updateSvgBounds();
   }
 
   function onUp(ev) {
