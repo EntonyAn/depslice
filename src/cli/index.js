@@ -9,6 +9,7 @@ import { getModifiedFiles } from "../lib/git.js";
 import { collectAllFiles, buildReverseIndex } from "../tools/findDependents.js";
 import { loadAliases } from "../lib/aliases.js";
 import { buildGraph, generateHtml } from "../lib/graphBuilder.js";
+import { runBenchmark } from "../lib/benchmark.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
 const CWD = process.cwd();
@@ -44,6 +45,9 @@ OPTIONS
     --depth <n>               Max recursion depth (default: 5)
     --format <fmt>            Output format: html (default, opens browser) or json
 
+  benchmark:
+    --depth <n>               Max recursion depth (default: 5)
+
   dependents:
     --transitive              Include transitive dependents
     --depth <n>               Max BFS depth for transitive search (default: 3)
@@ -56,6 +60,7 @@ EXAMPLES
   depslice map --modified --root /path/to/other-project
   depslice graph src/index.js
   depslice graph src/index.js --format json
+  depslice benchmark src/index.js
   depslice dependents src/lib/parser.js --transitive
   depslice dependents src/utils/format.ts --root /path/to/other-project --transitive
 `;
@@ -191,6 +196,62 @@ async function cmdMap(file, { modified = false, format = "tree", root }) {
   }
 }
 
+function fmt(n) { return n.toLocaleString("en-US").padStart(8); }
+function pct(saved, total) { return ((saved / total) * 100).toFixed(1).padStart(5) + "%"; }
+function bar(ratio, width = 28) {
+  const filled = Math.round(ratio * width);
+  return "█".repeat(filled) + "░".repeat(width - filled);
+}
+
+async function cmdBenchmark(file, { depth = 5, root }) {
+  const entry = resolve(root, file);
+  const result = runBenchmark(entry, root, depth);
+
+  const { naive, map, summary, mapAndSummary, fullSource } = result.strategies;
+  const W = 62;
+  const line = "─".repeat(W);
+
+  process.stdout.write(`\ndepslice benchmark  ·  ${result.entry}  ·  ${result.fileCount} files\n`);
+  process.stdout.write(`${line}\n`);
+  process.stdout.write(`${"Strategy".padEnd(38)} ${"Calls".padStart(5)}  ${"Tokens".padStart(8)}\n`);
+  process.stdout.write(`${line}\n`);
+
+  const rows = [naive, map, summary, mapAndSummary, fullSource];
+  for (const s of rows) {
+    const isBest = s.tokens === Math.min(...rows.map(r => r.tokens));
+    const marker = isBest ? " ◀" : "  ";
+    process.stdout.write(`${s.label.padEnd(38)} ${String(s.calls).padStart(5)}  ${fmt(s.tokens)}${marker}\n`);
+  }
+
+  process.stdout.write(`${line}\n`);
+  process.stdout.write("\nToken savings vs naive\n\n");
+
+  const strategies = [map, summary, mapAndSummary, fullSource];
+  for (const s of strategies) {
+    const saved = naive.tokens - s.tokens;
+    const ratio = saved / naive.tokens;
+    process.stdout.write(`  ${s.label.padEnd(36)} ${pct(saved, naive.tokens)}  ${bar(ratio)}\n`);
+  }
+
+  process.stdout.write("\n");
+
+  // Cost at typical rates
+  const rates = [
+    { name: "Claude Sonnet  ($3/1M in)", usd: 3 / 1_000_000 },
+    { name: "GPT-4o         ($2.50/1M in)", usd: 2.5 / 1_000_000 },
+  ];
+  process.stdout.write("Cost savings per query (input tokens)\n\n");
+  for (const rate of rates) {
+    const naiveCost  = (naive.tokens * rate.usd).toFixed(4);
+    const smartCost  = (mapAndSummary.tokens * rate.usd).toFixed(4);
+    const savedCost  = ((naive.tokens - mapAndSummary.tokens) * rate.usd).toFixed(4);
+    process.stdout.write(`  ${rate.name}\n`);
+    process.stdout.write(`    naive $${naiveCost}  →  depslice $${smartCost}  (saves $${savedCost} per query)\n`);
+    const perDay100 = ((naive.tokens - mapAndSummary.tokens) * rate.usd * 100).toFixed(2);
+    process.stdout.write(`    × 100 queries/day  →  $${perDay100}/day  ·  $${(perDay100 * 30).toFixed(0)}/month\n\n`);
+  }
+}
+
 async function cmdGraph(file, { depth = 5, format = "html", root }) {
   const entry = resolve(root, file);
   const map = walk(entry, depth, false, new Set(), 0, root);
@@ -303,6 +364,11 @@ async function main() {
 
   } else if (command === "map") {
     await cmdMap(positional[0], { modified: flags.modified === true, format: flags.format ?? "tree", root });
+
+  } else if (command === "benchmark") {
+    const file = positional[0];
+    if (!file) die("missing file argument\n\nUsage: depslice benchmark <file>");
+    await cmdBenchmark(file, { depth: flags.depth ? Number(flags.depth) : 5, root });
 
   } else if (command === "graph") {
     const file = positional[0];
