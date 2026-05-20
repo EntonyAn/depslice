@@ -4,7 +4,7 @@ import { analyzeFeatureSchema, analyzeFeatureHandler } from "./src/tools/analyze
 import { mapDependenciesSchema, mapDependenciesHandler } from "./src/tools/mapDependencies.js";
 import { findDependentsSchema, findDependentsHandler } from "./src/tools/findDependents.js";
 
-const server = new McpServer({ name: "git-slicer", version: "1.0.0" });
+const server = new McpServer({ name: "depslice", version: "1.0.0" });
 
 server.tool(
   "analyze_feature",

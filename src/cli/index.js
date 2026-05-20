@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 import { resolve, relative, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
@@ -10,10 +10,10 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
 const CWD = process.cwd();
 
 const HELP = `
-git-slicer — dependency analysis tool
+depslice â€” dependency analysis tool
 
 USAGE
-  git-slicer <command> [options]
+  depslice <command> [options]
 
 COMMANDS
   analyze <file>              Show dependency tree with exports and line counts
@@ -41,15 +41,15 @@ OPTIONS
     --scan-root <dir>         Subdirectory to scan (default: same as --root)
 
 EXAMPLES
-  git-slicer analyze src/index.js
-  git-slicer analyze src/index.js --root /path/to/other-project
-  git-slicer map src/lib/parser.js
-  git-slicer map --modified --root /path/to/other-project
-  git-slicer dependents src/lib/parser.js --transitive
-  git-slicer dependents src/utils/format.ts --root /path/to/other-project --transitive
+  depslice analyze src/index.js
+  depslice analyze src/index.js --root /path/to/other-project
+  depslice map src/lib/parser.js
+  depslice map --modified --root /path/to/other-project
+  depslice dependents src/lib/parser.js --transitive
+  depslice dependents src/utils/format.ts --root /path/to/other-project --transitive
 `;
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function rel(absolutePath) {
   const r = relative(CWD, absolutePath);
@@ -84,21 +84,21 @@ function resolveRoot(flagRoot) {
   return CWD;
 }
 
-// ─── tree renderer ──────────────────────────────────────────────────────────
+// â”€â”€â”€ tree renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function renderTree(map, absolutePath, prefix, isLast, visited, showExports) {
   const node = map.get(absolutePath);
-  const connector = isLast ? "└── " : "├── ";
-  const continuation = isLast ? "    " : "│   ";
+  const connector = isLast ? "â””â”€â”€ " : "â”œâ”€â”€ ";
+  const continuation = isLast ? "    " : "â”‚   ";
 
   const name = rel(absolutePath).replace(/\\/g, "/");
   const lineInfo = node?.lines ? ` (${node.lines} ln)` : "";
   const exportsInfo = showExports && node?.exports?.length
-    ? `  →  ${node.exports.join(", ")}`
+    ? `  â†’  ${node.exports.join(", ")}`
     : "";
 
   const alreadyVisited = visited.has(absolutePath);
-  const suffix = alreadyVisited ? "  ↑ already shown" : "";
+  const suffix = alreadyVisited ? "  â†‘ already shown" : "";
 
   process.stdout.write(`${prefix}${connector}${name}${lineInfo}${exportsInfo}${suffix}\n`);
 
@@ -116,7 +116,7 @@ function renderRoot(map, absolutePath, visited, showExports) {
   const name = rel(absolutePath).replace(/\\/g, "/");
   const lineInfo = node?.lines ? ` (${node.lines} ln)` : "";
   const exportsInfo = showExports && node?.exports?.length
-    ? `  →  ${node.exports.join(", ")}`
+    ? `  â†’  ${node.exports.join(", ")}`
     : "";
   process.stdout.write(`${name}${lineInfo}${exportsInfo}\n`);
   if (!node) return;
@@ -127,7 +127,7 @@ function renderRoot(map, absolutePath, visited, showExports) {
   }
 }
 
-// ─── commands ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdAnalyze(file, { depth = 5, full = false, root }) {
   const entry = resolve(root, file);
@@ -135,15 +135,15 @@ async function cmdAnalyze(file, { depth = 5, full = false, root }) {
 
   if (full) {
     for (const [, node] of map) {
-      process.stdout.write(`\n${"─".repeat(60)}\n`);
+      process.stdout.write(`\n${"â”€".repeat(60)}\n`);
       process.stdout.write(`${rel(node.absolutePath)} (depth ${node.depth})\n`);
-      process.stdout.write(`${"─".repeat(60)}\n`);
+      process.stdout.write(`${"â”€".repeat(60)}\n`);
       process.stdout.write(node.source ?? "[unreadable]\n");
     }
     return;
   }
 
-  process.stdout.write(`${rel(entry).replace(/\\/g, "/")}  ·  ${map.size} file${map.size !== 1 ? "s" : ""}  ·  depth ≤ ${depth}\n\n`);
+  process.stdout.write(`${rel(entry).replace(/\\/g, "/")}  Â·  ${map.size} file${map.size !== 1 ? "s" : ""}  Â·  depth â‰¤ ${depth}\n\n`);
   renderRoot(map, entry, new Set(), true);
 }
 
@@ -153,7 +153,7 @@ async function cmdMap(file, { modified = false, format = "tree", root }) {
     entryPoints = getModifiedFiles(root);
     if (entryPoints.length === 0) { process.stdout.write("No modified files in working tree.\n"); return; }
   } else {
-    if (!file) die("missing file argument\n\nUsage: git-slicer map <file> | git-slicer map --modified");
+    if (!file) die("missing file argument\n\nUsage: depslice map <file> | depslice map --modified");
     entryPoints = [resolve(root, file)];
   }
 
@@ -172,7 +172,7 @@ async function cmdMap(file, { modified = false, format = "tree", root }) {
   }
 
   const label = modified ? `${entryPoints.length} modified file(s)` : rel(entryPoints[0]).replace(/\\/g, "/");
-  process.stdout.write(`${label}  ·  ${merged.size} file${merged.size !== 1 ? "s" : ""}\n\n`);
+  process.stdout.write(`${label}  Â·  ${merged.size} file${merged.size !== 1 ? "s" : ""}\n\n`);
 
   const treeVisited = new Set();
   for (const entry of entryPoints) {
@@ -190,13 +190,13 @@ async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, ro
 
   const direct = [...(reverseIndex.get(absoluteTarget) ?? [])];
 
-  process.stdout.write(`${rel(absoluteTarget).replace(/\\/g, "/")}  ·  scanned ${allFiles.length} files\n\n`);
+  process.stdout.write(`${rel(absoluteTarget).replace(/\\/g, "/")}  Â·  scanned ${allFiles.length} files\n\n`);
 
   if (!transitive) {
     if (direct.length === 0) { process.stdout.write("No dependents found.\n"); return; }
     process.stdout.write(`Direct (${direct.length})\n`);
     for (let i = 0; i < direct.length; i++) {
-      const connector = i === direct.length - 1 ? "└── " : "├── ";
+      const connector = i === direct.length - 1 ? "â””â”€â”€ " : "â”œâ”€â”€ ";
       process.stdout.write(`${connector}${rel(direct[i]).replace(/\\/g, "/")}\n`);
     }
     return;
@@ -232,7 +232,7 @@ async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, ro
   if (direct.length > 0) {
     process.stdout.write(`Direct (${direct.length})\n`);
     for (let i = 0; i < direct.length; i++) {
-      const connector = i === direct.length - 1 ? "└── " : "├── ";
+      const connector = i === direct.length - 1 ? "â””â”€â”€ " : "â”œâ”€â”€ ";
       process.stdout.write(`${connector}${rel(direct[i]).replace(/\\/g, "/")}\n`);
     }
   }
@@ -240,7 +240,7 @@ async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, ro
   if (transitiveOnly.length > 0) {
     process.stdout.write(`\nTransitive (${transitiveOnly.length})\n`);
     for (let i = 0; i < transitiveOnly.length; i++) {
-      const connector = i === transitiveOnly.length - 1 ? "└── " : "├── ";
+      const connector = i === transitiveOnly.length - 1 ? "â””â”€â”€ " : "â”œâ”€â”€ ";
       const viaNode = via.get(transitiveOnly[i]);
       const viaLabel = viaNode ? `  via ${basename(viaNode)}` : "";
       process.stdout.write(`${connector}${rel(transitiveOnly[i]).replace(/\\/g, "/")}${viaLabel}\n`);
@@ -248,7 +248,7 @@ async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, ro
   }
 }
 
-// ─── main ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
@@ -263,7 +263,7 @@ async function main() {
 
   if (command === "analyze") {
     const file = positional[0];
-    if (!file) die("missing file argument\n\nUsage: git-slicer analyze <file>");
+    if (!file) die("missing file argument\n\nUsage: depslice analyze <file>");
     await cmdAnalyze(file, { depth: flags.depth ? Number(flags.depth) : 5, full: flags.full === true, root });
 
   } else if (command === "map") {
@@ -271,7 +271,7 @@ async function main() {
 
   } else if (command === "dependents") {
     const file = positional[0];
-    if (!file) die("missing file argument\n\nUsage: git-slicer dependents <file>");
+    if (!file) die("missing file argument\n\nUsage: depslice dependents <file>");
     await cmdDependents(file, {
       transitive: flags.transitive === true,
       depth: flags.depth ? Number(flags.depth) : 3,
@@ -280,7 +280,7 @@ async function main() {
     });
 
   } else {
-    die(`unknown command "${command}"\n\nRun git-slicer --help for usage`);
+    die(`unknown command "${command}"\n\nRun depslice --help for usage`);
   }
 }
 
@@ -288,3 +288,4 @@ main().catch((err) => {
   process.stderr.write(`${err.message}\n`);
   process.exit(1);
 });
+
