@@ -4,8 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/depslice)](https://www.npmjs.com/package/depslice)
 [![license](https://img.shields.io/npm/l/depslice)](LICENSE)
 [![node](https://img.shields.io/node/v/depslice)](package.json)
+[![stars](https://img.shields.io/github/stars/entonyan/depslice?style=flat)](https://github.com/entonyan/depslice/stargazers)
 
-**Dependency analysis tool for JavaScript and TypeScript projects.**  
+**Dependency analysis for JavaScript and TypeScript projects.**  
 Works as a **CLI** for humans and as an **MCP server** for AI agents (Claude, etc.).
 
 > *Claude reads 15 files to understand a feature. depslice needs 1.*
@@ -18,6 +19,20 @@ src/lib/walker.js (101 ln)  →  walk
 ├── src/lib/resolver.js (65 ln)  →  isSupportedFile, resolveImport, probeExtensions
 └── src/lib/aliases.js (46 ln)  →  loadAliases
 ```
+
+---
+
+## Quick start
+
+```bash
+npm install -g depslice
+
+depslice map src/index.js          # see the full dependency tree
+depslice graph src/index.js        # open interactive graph in browser
+depslice benchmark src/index.js    # measure token savings vs naive AI
+```
+
+No config. No setup. Works on any JS/TS project.
 
 ---
 
@@ -135,7 +150,7 @@ Features:
 - **Search bar** to find and highlight files by name
 - **Scroll** to zoom, **drag** to pan, nodes are draggable
 
-Use `--format json` to get a compact `{ nodes, edges }` structure instead of opening the browser — useful for piping into other tools or AI agents:
+Use `--format json` to get a compact `{ nodes, edges }` structure for AI agents or tooling:
 
 ```bash
 depslice graph src/index.js --format json
@@ -277,14 +292,22 @@ depslice performs **static import analysis** — it parses `import`/`require` st
 - Extensions: `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts`
 - Barrel files / index resolution (`import './components'` → `components/index.ts`)
 
-**Not supported:**
-- Dynamic imports with runtime variables (e.g. `` import(`./pages/${name}`) ``)
-- `node_modules` (intentionally — only local project files)
-- `export * from '...'` as a dependency hop
-
 ### Performance
 
 File parsing results are cached in memory keyed by absolute path and last-modified time (`mtime`). Repeated calls on the same files are served from cache without re-reading disk. The cache is scoped per project root, so multiple projects can be analyzed in the same session without cross-contamination.
+
+---
+
+## Limitations
+
+depslice is intentionally focused on static local analysis. It does not:
+
+- **Resolve `node_modules`** — only local project files are analyzed. This is by design: you want to understand *your* code, not library internals.
+- **Execute code** — analysis is purely static. Dynamic import patterns with runtime variables (e.g. `` import(`./pages/${page}`) ``) are not followed.
+- **Follow `export * from '...'`** — re-export hops are not treated as dependency edges.
+- **Run tests or builds** — depslice only reads and parses files.
+
+If you need a full call graph including `node_modules`, tools like [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) may be a better fit.
 
 ---
 
