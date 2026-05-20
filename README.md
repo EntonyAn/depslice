@@ -88,6 +88,32 @@ index.js (32 ln)
     â””â”€â”€ src/lib/resolver.js (65 ln)  â†‘ already shown
 ```
 
+### `graph` — interactive dependency graph
+
+Opens a visual dependency graph in the browser. Nodes are colored by folder, sized by line count, and fully interactive.
+
+```bash
+depslice graph <file> [--depth <n>] [--root <dir>] [--format html|json]
+```
+
+```
+$ depslice graph src/index.js
+Graph opened: /tmp/depslice-graph-1234567890.html
+10 nodes · 14 edges · depth ≤ 5
+```
+
+Features:
+- **Click a node** to isolate it and its direct connections — everything else dims
+- **Click a folder** in the legend to highlight all files in that folder
+- **Search bar** to find and highlight files by name
+- **Scroll** to zoom, **drag** to pan, nodes are draggable
+
+Use `--format json` to get a compact `{ nodes, edges }` structure instead of opening the browser — useful for piping into other tools or AI agents:
+
+```bash
+depslice graph src/index.js --format json
+```
+
 ### `dependents` â€” impact analysis
 
 Finds every file that imports a given file. Use this before changing a shared module to understand the blast radius.
@@ -207,10 +233,10 @@ File parsing results are cached in memory keyed by absolute path and last-modifi
 | Flag | Commands | Description |
 |---|---|---|
 | `--root <dir>` | all | Absolute path to the project root. Defaults to `cwd`. |
-| `--depth <n>` | `analyze`, `dependents` | Max recursion / BFS depth. Default: 5 (analyze), 3 (dependents). |
+| `--depth <n>` | `analyze`, `graph`, `dependents` | Max recursion / BFS depth. Default: 5 (analyze/graph), 3 (dependents). |
 | `--full` | `analyze` | Print full file source instead of compact summary. |
 | `--modified` | `map` | Use git-modified files as entry points. |
-| `--format <fmt>` | `map` | Output format: `tree` (default) or `json`. |
+| `--format <fmt>` | `map`, `graph` | `map`: `tree` (default) or `json`. `graph`: `html` (default, opens browser) or `json`. |
 | `--transitive` | `dependents` | Include transitive dependents (BFS). |
 | `--scan-root <dir>` | `dependents` | Subdirectory to scan. Defaults to `--root`. |
 

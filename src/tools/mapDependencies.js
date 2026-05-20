@@ -3,14 +3,15 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
 import { getModifiedFiles } from "../lib/git.js";
+import { buildGraph } from "../lib/graphBuilder.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
 
 export const mapDependenciesSchema = z.object({
-  targetFile: z.string().min(1).optional().describe("File di partenza (assoluto o relativo a `root`)"),
-  onlyModified: z.boolean().optional().default(false).describe("Se true, usa i file modificati da git status come entry point"),
-  format: z.enum(["markdown", "json"]).optional().default("markdown").describe("Formato output: 'markdown' o 'json'"),
-  root: z.string().optional().describe("Directory radice del progetto da analizzare (default: root del server MCP)"),
+  targetFile: z.string().min(1).optional().describe("Entry file (absolute or relative to `root`)"),
+  onlyModified: z.boolean().optional().default(false).describe("If true, uses git-modified files as entry points"),
+  format: z.enum(["markdown", "json", "graph"]).optional().default("markdown").describe("Output format: 'markdown' (tree), 'json' (raw), 'graph' (compact nodes+edges for AI)"),
+  root: z.string().optional().describe("Absolute path to the project root (default: MCP server root)"),
 });
 
 export async function mapDependenciesHandler({ targetFile, onlyModified, format, root }) {
@@ -38,11 +39,17 @@ export async function mapDependenciesHandler({ targetFile, onlyModified, format,
     for (const [k, v] of map) merged.set(k, v);
   }
 
-  const text = format === "json"
-    ? formatJson(entryPoints, merged)
-    : formatMarkdown(entryPoints, merged);
+  const text =
+    format === "json"    ? formatJson(entryPoints, merged) :
+    format === "graph"   ? formatGraph(entryPoints, merged, base) :
+    formatMarkdown(entryPoints, merged);
 
   return { content: [{ type: "text", text }] };
+}
+
+function formatGraph(entryPoints, map, root) {
+  const { nodes, edges } = buildGraph(map, root);
+  return JSON.stringify({ totalFiles: nodes.length, nodes, edges }, null, 2);
 }
 
 function formatJson(entryPoints, map) {

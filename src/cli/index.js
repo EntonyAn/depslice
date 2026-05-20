@@ -1,16 +1,20 @@
 ﻿#!/usr/bin/env node
 import { resolve, relative, dirname, basename } from "node:path";
+import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
 import { getModifiedFiles } from "../lib/git.js";
 import { collectAllFiles, buildReverseIndex } from "../tools/findDependents.js";
 import { loadAliases } from "../lib/aliases.js";
+import { buildGraph, generateHtml } from "../lib/graphBuilder.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
 const CWD = process.cwd();
 
 const HELP = `
-depslice â€” dependency analysis tool
+depslice — dependency analysis tool
 
 USAGE
   depslice <command> [options]
@@ -19,6 +23,7 @@ COMMANDS
   analyze <file>              Show dependency tree with exports and line counts
   map <file>                  Show dependency structure (no source, no exports)
   map --modified              Map dependencies of git-modified files
+  graph <file>                Open interactive dependency graph in the browser
   dependents <file>           Find all files that import a given file
 
 GLOBAL OPTIONS
@@ -35,6 +40,10 @@ OPTIONS
     --modified                Use git-modified files as entry points
     --format <fmt>            Output format: tree (default) or json
 
+  graph:
+    --depth <n>               Max recursion depth (default: 5)
+    --format <fmt>            Output format: html (default, opens browser) or json
+
   dependents:
     --transitive              Include transitive dependents
     --depth <n>               Max BFS depth for transitive search (default: 3)
@@ -45,6 +54,8 @@ EXAMPLES
   depslice analyze src/index.js --root /path/to/other-project
   depslice map src/lib/parser.js
   depslice map --modified --root /path/to/other-project
+  depslice graph src/index.js
+  depslice graph src/index.js --format json
   depslice dependents src/lib/parser.js --transitive
   depslice dependents src/utils/format.ts --root /path/to/other-project --transitive
 `;
@@ -180,6 +191,30 @@ async function cmdMap(file, { modified = false, format = "tree", root }) {
   }
 }
 
+async function cmdGraph(file, { depth = 5, format = "html", root }) {
+  const entry = resolve(root, file);
+  const map = walk(entry, depth, false, new Set(), 0, root);
+  const { nodes, edges } = buildGraph(map, root);
+
+  if (format === "json") {
+    process.stdout.write(JSON.stringify({ nodes, edges }, null, 2) + "\n");
+    return;
+  }
+
+  const html = generateHtml({ nodes, edges });
+  const outFile = resolve(tmpdir(), `depslice-graph-${Date.now()}.html`);
+  writeFileSync(outFile, html, "utf8");
+
+  const opener =
+    process.platform === "win32" ? `start "" "${outFile}"` :
+    process.platform === "darwin" ? `open "${outFile}"` :
+    `xdg-open "${outFile}"`;
+
+  execSync(opener, { stdio: "ignore", shell: true });
+  process.stdout.write(`Graph opened: ${outFile}\n`);
+  process.stdout.write(`${nodes.length} nodes · ${edges.length} edges · depth ≤ ${depth}\n`);
+}
+
 async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, root }) {
   const absoluteTarget = resolve(root, file);
   const scanDir = scanRoot ? resolve(root, scanRoot) : root;
@@ -268,6 +303,11 @@ async function main() {
 
   } else if (command === "map") {
     await cmdMap(positional[0], { modified: flags.modified === true, format: flags.format ?? "tree", root });
+
+  } else if (command === "graph") {
+    const file = positional[0];
+    if (!file) die("missing file argument\n\nUsage: depslice graph <file>");
+    await cmdGraph(file, { depth: flags.depth ? Number(flags.depth) : 5, format: flags.format ?? "html", root });
 
   } else if (command === "dependents") {
     const file = positional[0];
