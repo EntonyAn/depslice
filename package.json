@@ -1,17 +1,46 @@
 {
-  "name": "mcp-server",
+  "name": "git-slicer",
   "version": "1.0.0",
-  "description": "MCP server built with @modelcontextprotocol/sdk",
+  "description": "Dependency analysis tool for JS/TS projects — works as CLI and MCP server for Claude",
   "type": "module",
   "main": "index.js",
+  "bin": {
+    "git-slicer": "./src/cli/index.js"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js"
   },
-  "keywords": [],
+  "keywords": [
+    "mcp",
+    "claude",
+    "dependencies",
+    "dependency-graph",
+    "static-analysis",
+    "typescript",
+    "javascript"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src",
+    "index.js",
+    "CLAUDE.md",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/git-slicer.git"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/git-slicer#readme",
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/git-slicer/issues"
+  },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.22.0"
   }
 }

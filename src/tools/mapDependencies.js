@@ -1,24 +1,29 @@
 import { z } from "zod";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
 import { getModifiedFiles } from "../lib/git.js";
 
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
+
 export const mapDependenciesSchema = z.object({
-  targetFile: z.string().min(1).optional().describe("File di partenza (assoluto o relativo al cwd)"),
+  targetFile: z.string().min(1).optional().describe("File di partenza (assoluto o relativo a `root`)"),
   onlyModified: z.boolean().optional().default(false).describe("Se true, usa i file modificati da git status come entry point"),
   format: z.enum(["markdown", "json"]).optional().default("markdown").describe("Formato output: 'markdown' o 'json'"),
+  root: z.string().optional().describe("Directory radice del progetto da analizzare (default: root del server MCP)"),
 });
 
-export async function mapDependenciesHandler({ targetFile, onlyModified, format }) {
+export async function mapDependenciesHandler({ targetFile, onlyModified, format, root }) {
+  const base = root ? resolve(root) : PROJECT_ROOT;
   let entryPoints = [];
 
   if (onlyModified) {
-    entryPoints = getModifiedFiles();
+    entryPoints = getModifiedFiles(base);
     if (entryPoints.length === 0) {
       return { content: [{ type: "text", text: "Nessun file modificato nel working tree." }] };
     }
   } else if (targetFile) {
-    entryPoints = [resolve(process.cwd(), targetFile)];
+    entryPoints = [resolve(base, targetFile)];
   } else {
     return {
       content: [{ type: "text", text: "Errore: fornire `targetFile` oppure impostare `onlyModified: true`." }],
@@ -29,7 +34,7 @@ export async function mapDependenciesHandler({ targetFile, onlyModified, format 
   const merged = new Map();
 
   for (const entry of entryPoints) {
-    const map = walk(entry, 10, false, visited);
+    const map = walk(entry, 10, false, visited, 0, base);
     for (const [k, v] of map) merged.set(k, v);
   }
 

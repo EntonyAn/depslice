@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { resolve, extname } from "node:path";
+import { resolve, dirname, extname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
 
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
+
 export const analyzeFeatureSchema = z.object({
-  entryFile: z.string().min(1).describe("Percorso del file di ingresso (assoluto o relativo al cwd)"),
+  entryFile: z.string().min(1).describe("Percorso del file di ingresso (assoluto o relativo a `root`)"),
   maxDepth: z.number().int().min(1).max(20).optional().default(5).describe("Profondità massima di ricorsione (default 5)"),
+  root: z.string().optional().describe("Directory radice da cui risolvere i path relativi (default: root del server MCP)"),
 });
 
 const EXT_LANG = {
@@ -14,9 +18,10 @@ const EXT_LANG = {
   ".tsx": "tsx",
 };
 
-export async function analyzeFeatureHandler({ entryFile, maxDepth }) {
-  const absoluteEntry = resolve(process.cwd(), entryFile);
-  const map = walk(absoluteEntry, maxDepth, true, new Set());
+export async function analyzeFeatureHandler({ entryFile, maxDepth, root }) {
+  const base = root ? resolve(root) : PROJECT_ROOT;
+  const absoluteEntry = resolve(base, entryFile);
+  const map = walk(absoluteEntry, maxDepth, true, new Set(), 0, base);
 
   const lines = [];
   lines.push(`# Dependency Analysis: \`${absoluteEntry}\``);

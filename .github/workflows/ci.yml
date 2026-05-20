@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Syntax check
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check syntax — lib
+        run: |
+          for f in src/lib/*.js; do node --check "$f" && echo "OK: $f"; done
+
+      - name: Check syntax — tools
+        run: |
+          for f in src/tools/*.js; do node --check "$f" && echo "OK: $f"; done
+
+      - name: Check syntax — cli & server
+        run: |
+          node --check src/cli/index.js && echo "OK: src/cli/index.js"
+          node --check index.js && echo "OK: index.js"
+
+      - name: Smoke test — analyze
+        run: node src/cli/index.js analyze index.js
+
+      - name: Smoke test — map
+        run: node src/cli/index.js map index.js
+
+      - name: Smoke test — dependents
+        run: node src/cli/index.js dependents src/lib/parser.js --transitive
