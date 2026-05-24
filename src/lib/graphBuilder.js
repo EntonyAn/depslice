@@ -9,7 +9,14 @@ export function buildGraph(map, root = null) {
     const id = root ? relative(root, absPath).replace(/\\/g, "/") : absPath;
     if (!seen.has(id)) {
       seen.add(id);
-      nodes.push({ id, lines: node.lines ?? 0, depth: node.depth ?? 0 });
+      nodes.push({
+        id,
+        lines:       node.lines ?? 0,
+        depth:       node.depth ?? 0,
+        exportCount: node.exports?.length ?? 0,
+        importCount: node.imports.filter(i => map.has(i)).length,
+        ext:         id.split('.').pop().toLowerCase(),
+      });
     }
     for (const imp of node.imports) {
       if (map.has(imp)) {
@@ -124,7 +131,8 @@ body {
 /* ── SVG elements ── */
 .edge { fill:none; stroke-width:1.5; opacity:0.45; transition:opacity .25s ease, stroke-width .2s ease; }
 .edge.dim { opacity:.03; }
-.edge.hl  { opacity:1; stroke-width:2.5; }
+.edge.hl  { opacity:1; stroke-width:2.5; stroke-dasharray:6 4; animation:edge-flow 0.5s linear infinite; }
+@keyframes edge-flow { to { stroke-dashoffset:-20; } }
 
 .node-g { cursor:grab; transition:filter .2s ease; }
 .node-g:hover { filter:drop-shadow(0 0 7px rgba(88,166,255,0.3)); }
@@ -138,18 +146,22 @@ body {
 }
 .node-g:hover .node-rect { fill:#1c2128; stroke:#58a6ff; }
 .node-g.hl .node-rect    { stroke-width:2.5; fill:#1c2128; }
-.node-g.dim .node-rect   { opacity:.1; }
-.node-g.dim .node-bar    { opacity:.1; }
-.node-g.dim .node-name   { opacity:.1; }
-.node-g.dim .node-lines  { opacity:.1; }
+.node-g.dim .node-rect        { opacity:.1; }
+.node-g.dim .node-bar         { opacity:.1; }
+.node-g.dim .node-name        { opacity:.1; }
+.node-g.dim .node-meta        { opacity:.1; }
+.node-g.dim .node-badge-text  { opacity:.1; }
+.node-g.dim .node-divider     { opacity:.1; }
 .node-rect  { transition:stroke .2s, fill .2s, opacity .25s; }
 .node-bar   { transition:opacity .25s; }
 .node-name  { transition:opacity .25s; }
-.node-lines { transition:opacity .25s; }
+.node-meta  { transition:opacity .25s; }
 
-.node-bar  { transition:opacity .15s; }
-.node-name { font-size:11px; fill:#c9d1d9; transition:opacity .15s; }
-.node-lines{ font-size:10px; fill:#484f58; transition:opacity .15s; }
+.node-bar   { transition:opacity .15s; }
+.node-name  { font-size:11px; fill:#c9d1d9; transition:opacity .15s; }
+.node-meta  { font-size:9px;  fill:#484f58; transition:opacity .15s; }
+.node-badge-text { font-size:8.5px; font-weight:700; }
+.node-divider { stroke:#21262d; stroke-width:1; }
 
 /* column depth label */
 .col-label { font-size:10px; fill:#30363d; text-anchor:middle; }
@@ -219,7 +231,7 @@ body {
 <script>
 const DATA    = ${data};
 const FOLDERS = ${folderData};
-const STORAGE_KEY = "depslice-pos-" + (DATA.nodes[0]?.id ?? "graph");
+const STORAGE_KEY = "depslice-pos-v2-" + NW + "x" + NH + "-" + (DATA.nodes[0]?.id ?? "graph");
 
 // ── Palette ───────────────────────────────────────────────────────────────
 const PAL = ["#58a6ff","#3fb950","#d2a8ff","#ffa657","#f78166","#79c0ff","#56d364","#e3b341","#ff7b72","#a5d6ff","#bc8cff","#ffb86c"];
@@ -234,11 +246,23 @@ function fkey(id) {
 const ncolor = d => fColor.get(fkey(d.id)) ?? "#8b949e";
 const bname  = id => id.split("/").pop();
 
+// ── File-type badge ───────────────────────────────────────────────────────
+function extBadge(ext) {
+  switch (ext) {
+    case "ts":  case "mts": case "cts": return { label:"TS",  bg:"#3178c6", fg:"#fff" };
+    case "tsx":                          return { label:"TSX", bg:"#61dafb", fg:"#0d1117" };
+    case "jsx":                          return { label:"JSX", bg:"#61dafb", fg:"#0d1117" };
+    case "mjs": case "cjs":             return { label:"MJS", bg:"#f0db4f", fg:"#323330" };
+    case "js":                           return { label:"JS",  bg:"#f0db4f", fg:"#323330" };
+    default:                             return { label: ext.toUpperCase().slice(0,3), bg:"#30363d", fg:"#8b949e" };
+  }
+}
+
 // ── Layout constants ──────────────────────────────────────────────────────
-const NW = 175;   // node width
-const NH = 30;    // node height
-const CW = 220;   // column width (center to center)
-const RH = 46;    // row height
+const NW = 200;   // node width
+const NH = 46;    // node height (two rows)
+const CW = 245;   // column width (center to center)
+const RH = 60;    // row height
 const PX = 40;    // left/right padding
 const PY = 50;    // top/bottom padding
 
@@ -342,13 +366,29 @@ const fiEls     = new Map(); // id → sidebar item
 DATA.nodes.forEach((n, i) => {
   const g = el("g", { class:"node-g", transform:"translate("+n.px+","+(n.py-NH/2)+")" }, nodeGroup);
 
+  // background + left bar
   el("rect", { class:"node-rect", width:NW, height:NH }, g);
-  // colored left bar
   el("rect", { class:"node-bar", x:0, y:0, width:4, height:NH, rx:3, ry:3, fill:ncolor(n) }, g);
 
+  // ── Row 1: filename ──────────────────────────────────────────────────
   const label = bname(n.id);
-  txt(label,   { class:"node-name",  x:12, y:NH/2+1 }, g);
-  txt(n.lines+"ln", { class:"node-lines", x:NW-8, y:NH/2+1, "text-anchor":"end" }, g);
+  txt(label, { class:"node-name", x:12, y:16 }, g);
+
+  // file-type badge (top-right)
+  const badge = extBadge(n.ext);
+  const badgeW = badge.label.length <= 2 ? 22 : 30;
+  const badgeX = NW - badgeW - 6;
+  el("rect", { x:badgeX, y:5, width:badgeW, height:14, rx:3, ry:3, fill:badge.bg }, g);
+  txt(badge.label, { class:"node-badge-text", x:badgeX + badgeW/2, y:15, "text-anchor":"middle", fill:badge.fg }, g);
+
+  // ── Divider ───────────────────────────────────────────────────────────
+  el("line", { class:"node-divider", x1:6, y1:24, x2:NW-6, y2:24 }, g);
+
+  // ── Row 2: export count · import count · lines ───────────────────────
+  const metaY = 37;
+  txt("↑ "+n.exportCount+" exp", { class:"node-meta", x:12,      y:metaY }, g);
+  txt("→ "+n.importCount+" imp", { class:"node-meta", x:88,      y:metaY }, g);
+  txt(n.lines+"ln",              { class:"node-meta", x:NW-8,    y:metaY, "text-anchor":"end" }, g);
 
   g.addEventListener("mousedown",  e => startDrag(e, n, g));
   g.addEventListener("mouseenter", e => showTip(e, n));
@@ -456,12 +496,12 @@ let tipNode = null;
 
 function showTip(e, n) {
   tipNode = n;
-  const out = DATA.edges.filter(l=>l.from===n.id).length;
-  const inc = DATA.edges.filter(l=>l.to===n.id).length;
+  const importedBy = DATA.edges.filter(l=>l.to===n.id).length;
+  const badge = extBadge(n.ext);
   ttEl.innerHTML =
     '<span class="tt-name">'+n.id+'</span>'+
-    '<span class="tt-meta">'+n.lines+' lines &nbsp;·&nbsp; depth '+n.depth+'</span>'+
-    '<span class="tt-meta">→ imports '+out+' &nbsp;·&nbsp; ← imported by '+inc+'</span>';
+    '<span class="tt-meta">'+n.lines+' lines &nbsp;·&nbsp; depth '+n.depth+' &nbsp;·&nbsp; <span style="background:'+badge.bg+';color:'+badge.fg+';padding:1px 5px;border-radius:3px;font-size:9px;">'+badge.label+'</span></span>'+
+    '<span class="tt-meta">↑ '+n.exportCount+' exports &nbsp;·&nbsp; → '+n.importCount+' imports &nbsp;·&nbsp; ← imported by '+importedBy+'</span>';
   ttEl.style.opacity="1";
   moveTip(e);
 }
@@ -593,35 +633,77 @@ let isolated = null;
 function resetAll() {
   isolated = null;
   nodeEls.forEach(g  => g.classList.remove("dim","hl"));
-  edgeEls.forEach(ep => { ep.classList.remove("dim","hl"); ep.setAttribute("marker-end","url(#arr)"); });
-  fiEls.forEach(fi   => fi.classList.remove("active","dimmed"));
+  edgeEls.forEach(ep => {
+    ep.classList.remove("dim","hl");
+    ep.setAttribute("marker-end","url(#arr)");
+    ep.style.strokeDasharray = "";
+    ep.style.animation = "";
+  });
+  fiEls.forEach(fi => fi.classList.remove("active","dimmed"));
   applyDepth();
 }
 
 function isolateNode(id) {
   isolated = id;
+
+  // Build connected set
   const conn = new Set([id]);
   DATA.edges.forEach(e => {
     if (e.from===id) conn.add(e.to);
     if (e.to===id)   conn.add(e.from);
   });
-  nodeEls.forEach((g, nid)  => { g.classList.toggle("dim",!conn.has(nid)); g.classList.toggle("hl",nid===id); });
-  edgeEls.forEach((ep,key)  => {
-    const [fr,to] = key.split("→");
-    const rel = fr===id||to===id;
-    ep.classList.toggle("dim",!rel); ep.classList.toggle("hl",rel);
-    ep.setAttribute("marker-end", rel?"url(#arr-hl)":"url(#arr)");
-  });
-  fiEls.forEach((fi,fid) => { fi.classList.toggle("active",fid===id); fi.classList.toggle("dimmed",!conn.has(fid)); });
 
-  // scroll into view
-  const n = DATA.nodes.find(x=>x.id===id);
-  if (n) {
-    const wrap = document.getElementById("graph-wrap");
-    const sx = n.px - wrap.clientWidth/2  + NW/2;
-    const sy = n.py - wrap.clientHeight/2;
-    wrap.scrollTo({ left:Math.max(0,sx), top:Math.max(0,sy), behavior:"smooth" });
-  }
+  // Step 1 (t=0): everything dim, clicked node highlight immediately
+  nodeEls.forEach((g, nid) => {
+    g.classList.add("dim");
+    g.classList.remove("hl");
+  });
+  edgeEls.forEach((ep, key) => {
+    ep.classList.add("dim");
+    ep.classList.remove("hl");
+    ep.setAttribute("marker-end","url(#arr)");
+  });
+  fiEls.forEach((fi, fid) => {
+    fi.classList.add("dimmed");
+    fi.classList.remove("active");
+  });
+
+  nodeEls.get(id)?.classList.remove("dim");
+  nodeEls.get(id)?.classList.add("hl");
+  fiEls.get(id)?.classList.remove("dimmed");
+  fiEls.get(id)?.classList.add("active");
+
+  // Step 2 (t=100ms): highlight edges with flow animation
+  setTimeout(() => {
+    edgeEls.forEach((ep, key) => {
+      const [fr, to] = key.split("→");
+      if (fr===id || to===id) {
+        ep.classList.remove("dim");
+        ep.classList.add("hl");
+        ep.setAttribute("marker-end","url(#arr-hl)");
+      }
+    });
+  }, 100);
+
+  // Step 3 (t=200ms): reveal connected nodes with a wave
+  setTimeout(() => {
+    conn.forEach(nid => {
+      if (nid === id) return;
+      nodeEls.get(nid)?.classList.remove("dim");
+      fiEls.get(nid)?.classList.remove("dimmed");
+    });
+
+    // scroll into view
+    const n = DATA.nodes.find(x => x.id===id);
+    if (n) {
+      const wrap = document.getElementById("graph-wrap");
+      wrap.scrollTo({
+        left: Math.max(0, n.px - wrap.clientWidth/2  + NW/2),
+        top:  Math.max(0, n.py - wrap.clientHeight/2),
+        behavior: "smooth"
+      });
+    }
+  }, 200);
 }
 
 function focusNode(id) {

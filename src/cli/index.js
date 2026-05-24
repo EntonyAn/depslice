@@ -14,6 +14,15 @@ import { runBenchmark } from "../lib/benchmark.js";
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../");
 const CWD = process.cwd();
 
+const COMMAND_ALIASES = {
+  'g':   'graph',
+  'a':   'analyze',
+  'm':   'map',
+  'b':   'benchmark',
+  'd':   'dependents',
+  'dep': 'dependents',
+};
+
 const HELP = `
 depslice — dependency analysis tool
 
@@ -26,6 +35,10 @@ COMMANDS
   map --modified              Map dependencies of git-modified files
   graph <file>                Open interactive dependency graph in the browser
   dependents <file>           Find all files that import a given file
+
+ALIASES
+  g   graph       m   map       a   analyze
+  b   benchmark   d   dependents
 
 GLOBAL OPTIONS
   --root <dir>                Root directory of the project to analyze.
@@ -95,7 +108,10 @@ function die(msg) {
 }
 
 function resolveRoot(flagRoot) {
-  if (flagRoot) return resolve(flagRoot);
+  if (flagRoot && typeof flagRoot === "string") return resolve(flagRoot);
+  if (flagRoot === true) {
+    process.stderr.write("Warning: --root requires a directory path. Using current directory.\n");
+  }
   // Default: cwd so the CLI works on the project the user is inside
   return CWD;
 }
@@ -347,7 +363,13 @@ async function cmdDependents(file, { transitive = false, depth = 3, scanRoot, ro
 // â”€â”€â”€ main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function main() {
-  const [command, ...rest] = process.argv.slice(2);
+  // Force UTF-8 output on Windows cmd.exe (chcp 65001)
+  if (process.platform === "win32") {
+    try { execSync("chcp 65001", { stdio: "ignore", shell: true }); } catch {}
+  }
+
+  const [rawCommand, ...rest] = process.argv.slice(2);
+  const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
 
   if (!command || command === "--help" || command === "-h") {
     process.stdout.write(HELP);

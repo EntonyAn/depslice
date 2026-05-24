@@ -32,6 +32,16 @@ depslice graph src/index.js        # open interactive graph in browser
 depslice benchmark src/index.js    # measure token savings vs naive AI
 ```
 
+Every command has a short alias:
+
+```bash
+depslice m src/index.js            # map
+depslice g src/index.js            # graph
+depslice a src/index.js            # analyze
+depslice b src/index.js            # benchmark
+depslice d src/index.js            # dependents
+```
+
 No config. No setup. Works on any JS/TS project.
 
 ---
@@ -75,6 +85,25 @@ npm install -g depslice
 ## CLI usage
 
 All commands accept an optional `--root <dir>` flag. If omitted, the current working directory is used.
+
+### Aliases
+
+Every command has a one-letter alias:
+
+| Alias | Command |
+|---|---|
+| `g` | `graph` |
+| `m` | `map` |
+| `a` | `analyze` |
+| `b` | `benchmark` |
+| `d` / `dep` | `dependents` |
+
+```bash
+depslice g src/index.js            # same as: depslice graph src/index.js
+depslice b src/index.js --depth 3  # same as: depslice benchmark src/index.js --depth 3
+```
+
+> **Windows note:** depslice automatically sets the terminal to UTF-8 (`chcp 65001`) so tree characters render correctly in `cmd.exe`.
 
 ### `analyze` — dependency tree with source
 
@@ -132,23 +161,34 @@ index.js (32 ln)
 
 ### `graph` — interactive dependency graph
 
-Opens a visual dependency graph in the browser. Nodes are colored by folder, sized by line count, and fully interactive.
+Opens a visual dependency graph in the browser. Nodes are colored by folder and fully interactive.
 
 ```bash
 depslice graph <file> [--depth <n>] [--root <dir>] [--format html|json]
+# or short alias:
+depslice g <file>
 ```
 
 ```
-$ depslice graph src/index.js
+$ depslice g src/index.js
 Graph opened: /tmp/depslice-graph-1234567890.html
 10 nodes · 14 edges · depth ≤ 5
 ```
 
-Features:
-- **Click a node** to isolate it and its direct connections — everything else dims
-- **Click a folder** in the legend to highlight all files in that folder
-- **Search bar** to find and highlight files by name
-- **Scroll** to zoom, **drag** to pan, nodes are draggable
+**Each node shows at a glance:**
+- Filename + file-type badge (`JS` / `TS` / `TSX` / `JSX`) color-coded by language
+- Export count (`↑ N exp`) — how many symbols this file exports
+- Import count (`→ N imp`) — how many local files it imports
+- Line count
+
+**Interactions:**
+- **Click a node** — isolates it with an animated wave: the node lights up first, then its edges flow, then connected nodes appear
+- **Highlighted edges** animate a flowing dash while a node is isolated
+- **Search bar** — find and highlight files by name
+- **Depth slider** — filter the graph by import depth in real time
+- **Drag nodes** — reposition freely; layout is saved in `localStorage` per project
+- **↺ Reset layout** — restore the auto-calculated column layout
+- **Click background** — deselect and return to full graph view
 
 Use `--format json` to get a compact `{ nodes, edges }` structure for AI agents or tooling:
 
