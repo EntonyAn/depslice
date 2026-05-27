@@ -246,6 +246,15 @@ body {
 <script>
 const DATA    = ${data};
 const FOLDERS = ${folderData};
+
+// ── Layout constants ──────────────────────────────────────────────────────
+const NW = 210;   // node width
+const NH = 64;    // node height
+const CW = 255;   // column width (center to center)
+const RH = 76;    // row height
+const PX = 40;    // left/right padding
+const PY = 50;    // top/bottom padding
+
 const STORAGE_KEY = "depslice-pos-v2-" + NW + "x" + NH + "-" + (DATA.nodes[0]?.id ?? "graph");
 
 // ── Palette ───────────────────────────────────────────────────────────────
@@ -289,13 +298,7 @@ function extBadge(ext) {
   }
 }
 
-// ── Layout constants ──────────────────────────────────────────────────────
-const NW = 210;   // node width
-const NH = 64;    // node height (folder + name + counts + size bar)
-const CW = 255;   // column width (center to center)
-const RH = 76;    // row height
-const PX = 40;    // left/right padding
-const PY = 50;    // top/bottom padding
+
 
 // ── Pre-compute max lines for relative size bar ───────────────────────────
 const maxLines = Math.max(...DATA.nodes.map(n => n.lines), 1);
