@@ -25,6 +25,15 @@ export function buildGraph(map, root = null) {
       }
     }
   }
+  // Compute importedBy count (blast-radius indicator) for each node
+  const importedByCount = new Map();
+  for (const e of edges) {
+    importedByCount.set(e.to, (importedByCount.get(e.to) ?? 0) + 1);
+  }
+  for (const n of nodes) {
+    n.importedBy = importedByCount.get(n.id) ?? 0;
+  }
+
   return { nodes, edges };
 }
 
@@ -148,20 +157,26 @@ body {
 .node-g.hl .node-rect    { stroke-width:2.5; fill:#1c2128; }
 .node-g.dim .node-rect        { opacity:.1; }
 .node-g.dim .node-bar         { opacity:.1; }
+.node-g.dim .node-folder      { opacity:.1; }
 .node-g.dim .node-name        { opacity:.1; }
 .node-g.dim .node-meta        { opacity:.1; }
 .node-g.dim .node-badge-text  { opacity:.1; }
 .node-g.dim .node-divider     { opacity:.1; }
+.node-g.dim .node-sizebg      { opacity:.1; }
+.node-g.dim .node-sizefill    { opacity:.1; }
 .node-rect  { transition:stroke .2s, fill .2s, opacity .25s; }
 .node-bar   { transition:opacity .25s; }
 .node-name  { transition:opacity .25s; }
 .node-meta  { transition:opacity .25s; }
 
-.node-bar   { transition:opacity .15s; }
-.node-name  { font-size:11px; fill:#c9d1d9; transition:opacity .15s; }
-.node-meta  { font-size:9px;  fill:#484f58; transition:opacity .15s; }
+.node-bar      { transition:opacity .15s; }
+.node-folder   { font-size:8.5px; fill:#484f58; transition:opacity .15s; }
+.node-name     { font-size:11px;  fill:#c9d1d9; transition:opacity .15s; font-weight:600; }
+.node-meta     { font-size:9px;   fill:#484f58; transition:opacity .15s; }
 .node-badge-text { font-size:8.5px; font-weight:700; }
-.node-divider { stroke:#21262d; stroke-width:1; }
+.node-divider  { stroke:#21262d; stroke-width:1; }
+.node-sizebg   { fill:#1c2128; transition:opacity .15s; }
+.node-sizefill { transition:opacity .15s, width .3s ease; }
 
 /* column depth label */
 .col-label { font-size:10px; fill:#30363d; text-anchor:middle; }
@@ -246,6 +261,22 @@ function fkey(id) {
 const ncolor = d => fColor.get(fkey(d.id)) ?? "#8b949e";
 const bname  = id => id.split("/").pop();
 
+// ── Folder prefix (dim breadcrumb) ───────────────────────────────────────
+function folderPrefix(id) {
+  const parts = id.split("/");
+  if (parts.length <= 1) return "";
+  return parts.slice(0, -1).join("/");
+}
+
+// ── importedBy criticality color ─────────────────────────────────────────
+function critColor(n) {
+  if (n <= 0) return "#484f58";   // unused / entry point
+  if (n === 1) return "#6e7681";  // low
+  if (n <= 3)  return "#e3b341";  // medium  (yellow)
+  if (n <= 6)  return "#ffa657";  // high    (orange)
+  return "#f78166";               // critical (red)
+}
+
 // ── File-type badge ───────────────────────────────────────────────────────
 function extBadge(ext) {
   switch (ext) {
@@ -259,12 +290,15 @@ function extBadge(ext) {
 }
 
 // ── Layout constants ──────────────────────────────────────────────────────
-const NW = 200;   // node width
-const NH = 46;    // node height (two rows)
-const CW = 245;   // column width (center to center)
-const RH = 60;    // row height
+const NW = 210;   // node width
+const NH = 64;    // node height (folder + name + counts + size bar)
+const CW = 255;   // column width (center to center)
+const RH = 76;    // row height
 const PX = 40;    // left/right padding
 const PY = 50;    // top/bottom padding
+
+// ── Pre-compute max lines for relative size bar ───────────────────────────
+const maxLines = Math.max(...DATA.nodes.map(n => n.lines), 1);
 
 // ── Group nodes by depth ──────────────────────────────────────────────────
 const byDepth = new Map();
@@ -366,29 +400,46 @@ const fiEls     = new Map(); // id → sidebar item
 DATA.nodes.forEach((n, i) => {
   const g = el("g", { class:"node-g", transform:"translate("+n.px+","+(n.py-NH/2)+")" }, nodeGroup);
 
-  // background + left bar
+  // ── Background + left bar ─────────────────────────────────────────────
   el("rect", { class:"node-rect", width:NW, height:NH }, g);
   el("rect", { class:"node-bar", x:0, y:0, width:4, height:NH, rx:3, ry:3, fill:ncolor(n) }, g);
 
-  // ── Row 1: filename ──────────────────────────────────────────────────
-  const label = bname(n.id);
-  txt(label, { class:"node-name", x:12, y:16 }, g);
-
-  // file-type badge (top-right)
+  // ── File-type badge (top-right) ───────────────────────────────────────
   const badge = extBadge(n.ext);
   const badgeW = badge.label.length <= 2 ? 22 : 30;
   const badgeX = NW - badgeW - 6;
   el("rect", { x:badgeX, y:5, width:badgeW, height:14, rx:3, ry:3, fill:badge.bg }, g);
   txt(badge.label, { class:"node-badge-text", x:badgeX + badgeW/2, y:15, "text-anchor":"middle", fill:badge.fg }, g);
 
-  // ── Divider ───────────────────────────────────────────────────────────
-  el("line", { class:"node-divider", x1:6, y1:24, x2:NW-6, y2:24 }, g);
+  // ── Row 1: folder prefix (dim) + filename ─────────────────────────────
+  const folder = folderPrefix(n.id);
+  const fname  = bname(n.id);
+  if (folder) {
+    txt(folder + "/", { class:"node-folder", x:12, y:14 }, g);
+    txt(fname, { class:"node-name", x:12, y:25 }, g);
+  } else {
+    txt(fname, { class:"node-name", x:12, y:21 }, g);
+  }
 
-  // ── Row 2: export count · import count · lines ───────────────────────
-  const metaY = 37;
-  txt("↑ "+n.exportCount+" exp", { class:"node-meta", x:12,      y:metaY }, g);
-  txt("→ "+n.importCount+" imp", { class:"node-meta", x:88,      y:metaY }, g);
-  txt(n.lines+"ln",              { class:"node-meta", x:NW-8,    y:metaY, "text-anchor":"end" }, g);
+  // ── Divider ───────────────────────────────────────────────────────────
+  el("line", { class:"node-divider", x1:6, y1:32, x2:NW-6, y2:32 }, g);
+
+  // ── Row 2: exports · imports · importedBy (color-coded) · lines ───────
+  const metaY = 43;
+  txt("↑"+n.exportCount,   { class:"node-meta", x:12,  y:metaY }, g);
+  txt("exp",               { class:"node-meta", x:24,  y:metaY, fill:"#30363d" }, g);
+  txt("→"+n.importCount,   { class:"node-meta", x:52,  y:metaY }, g);
+  txt("imp",               { class:"node-meta", x:64,  y:metaY, fill:"#30363d" }, g);
+  txt("←"+n.importedBy,    { class:"node-meta", x:96,  y:metaY, fill:critColor(n.importedBy) }, g);
+  txt("used",              { class:"node-meta", x:108, y:metaY, fill:"#30363d" }, g);
+  txt(n.lines+"ln",        { class:"node-meta", x:NW-8, y:metaY, "text-anchor":"end" }, g);
+
+  // ── Size bar (relative to largest file in graph) ──────────────────────
+  const barX = 6, barY = 52, barH = 5, barMaxW = NW - 12;
+  const barW = Math.max(4, Math.round((n.lines / maxLines) * barMaxW));
+  el("rect", { class:"node-sizebg",   x:barX, y:barY, width:barMaxW, height:barH, rx:2, ry:2 }, g);
+  el("rect", { class:"node-sizefill", x:barX, y:barY, width:barW,    height:barH, rx:2, ry:2,
+    fill:ncolor(n), opacity:"0.55" }, g);
 
   g.addEventListener("mousedown",  e => startDrag(e, n, g));
   g.addEventListener("mouseenter", e => showTip(e, n));
@@ -496,12 +547,20 @@ let tipNode = null;
 
 function showTip(e, n) {
   tipNode = n;
-  const importedBy = DATA.edges.filter(l=>l.to===n.id).length;
   const badge = extBadge(n.ext);
+  const critLabel = n.importedBy === 0 ? "entry point"
+    : n.importedBy <= 1 ? "low impact"
+    : n.importedBy <= 3 ? "shared module"
+    : n.importedBy <= 6 ? "high impact"
+    : "critical — change carefully";
   ttEl.innerHTML =
     '<span class="tt-name">'+n.id+'</span>'+
-    '<span class="tt-meta">'+n.lines+' lines &nbsp;·&nbsp; depth '+n.depth+' &nbsp;·&nbsp; <span style="background:'+badge.bg+';color:'+badge.fg+';padding:1px 5px;border-radius:3px;font-size:9px;">'+badge.label+'</span></span>'+
-    '<span class="tt-meta">↑ '+n.exportCount+' exports &nbsp;·&nbsp; → '+n.importCount+' imports &nbsp;·&nbsp; ← imported by '+importedBy+'</span>';
+    '<span class="tt-meta">'+n.lines+' lines &nbsp;·&nbsp; depth '+n.depth+
+      ' &nbsp;·&nbsp; <span style="background:'+badge.bg+';color:'+badge.fg+
+      ';padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;">'+badge.label+'</span></span>'+
+    '<span class="tt-meta">↑ '+n.exportCount+' exports &nbsp;·&nbsp; → '+n.importCount+' imports</span>'+
+    '<span class="tt-meta" style="color:'+critColor(n.importedBy)+'">← imported by '+n.importedBy+
+      ' &nbsp;·&nbsp; '+critLabel+'</span>';
   ttEl.style.opacity="1";
   moveTip(e);
 }
