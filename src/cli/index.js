@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env node
-import { resolve, relative, dirname, basename } from "node:path";
+import { resolve, relative, dirname, basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { walk } from "../lib/walker.js";
@@ -23,59 +23,41 @@ const COMMAND_ALIASES = {
   'dep': 'dependents',
 };
 
+const KNOWN_COMMANDS = new Set([
+  'graph','analyze','map','benchmark','dependents',
+  '--help','-h','--mcp',
+  ...Object.keys(COMMAND_ALIASES),
+]);
+
 const HELP = `
-depslice — dependency analysis tool
+depslice — dependency analysis for JS/TS projects
 
 USAGE
-  depslice <command> [options]
+  depslice <file>             Open interactive graph (default)
+  depslice <command> <file>   Run a specific command
 
 COMMANDS
-  analyze <file>              Show dependency tree with exports and line counts
-  map <file>                  Show dependency structure (no source, no exports)
-  map --modified              Map dependencies of git-modified files
-  graph <file>                Open interactive dependency graph in the browser
-  dependents <file>           Find all files that import a given file
+  graph  <file>   g    Open interactive dependency graph in browser
+  map    <file>   m    Print dependency tree (no source)
+  dependents <file>  d  Find every file that imports a given file
 
-ALIASES
-  g   graph       m   map       a   analyze
-  b   benchmark   d   dependents
+OTHER COMMANDS
+  analyze   <file>   a    Dependency tree with exported symbols
+  benchmark <file>   b    Measure token savings vs naive file reading
 
 GLOBAL OPTIONS
-  --root <dir>                Root directory of the project to analyze.
-                              File arguments are resolved relative to this.
-                              Defaults to the current working directory.
-
-OPTIONS
-  analyze:
-    --depth <n>               Max recursion depth (default: 5)
-    --full                    Print full source instead of compact summary
-
-  map:
-    --modified                Use git-modified files as entry points
-    --format <fmt>            Output format: tree (default) or json
-
-  graph:
-    --depth <n>               Max recursion depth (default: 5)
-    --format <fmt>            Output format: html (default, opens browser) or json
-
-  benchmark:
-    --depth <n>               Max recursion depth (default: 5)
-
-  dependents:
-    --transitive              Include transitive dependents
-    --depth <n>               Max BFS depth for transitive search (default: 3)
-    --scan-root <dir>         Subdirectory to scan (default: same as --root)
+  --root <dir>       Project root (auto-detected from package.json if omitted)
+  --depth <n>        Max recursion depth (default: 5)
+  --format <fmt>     Output format: tree|json (map) or html|json (graph)
+  --full             Print full source (analyze only)
+  --modified         Use git-modified files as entry points (map only)
+  --transitive       Include transitive dependents (dependents only)
 
 EXAMPLES
-  depslice analyze src/index.js
-  depslice analyze src/index.js --root /path/to/other-project
-  depslice map src/lib/parser.js
-  depslice map --modified --root /path/to/other-project
-  depslice graph src/index.js
-  depslice graph src/index.js --format json
-  depslice benchmark src/index.js
-  depslice dependents src/lib/parser.js --transitive
-  depslice dependents src/utils/format.ts --root /path/to/other-project --transitive
+  depslice src/index.js               # open graph, auto-detect root
+  depslice m src/index.js             # print dependency tree
+  depslice d src/lib/utils.js         # who imports utils.js?
+  depslice g src/App.tsx --depth 3    # graph, max 3 levels deep
 `;
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -107,13 +89,25 @@ function die(msg) {
   process.exit(1);
 }
 
+/** Walk up from startDir until we find package.json / tsconfig.json / .git */
+function findRoot(startDir) {
+  const markers = ["package.json", "tsconfig.json", "jsconfig.json", ".git"];
+  let dir = startDir;
+  while (true) {
+    if (markers.some(m => existsSync(join(dir, m)))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break; // filesystem root
+    dir = parent;
+  }
+  return startDir;
+}
+
 function resolveRoot(flagRoot) {
   if (flagRoot && typeof flagRoot === "string") return resolve(flagRoot);
   if (flagRoot === true) {
-    process.stderr.write("Warning: --root requires a directory path. Using current directory.\n");
+    process.stderr.write("Warning: --root requires a path. Auto-detecting project root...\n");
   }
-  // Default: cwd so the CLI works on the project the user is inside
-  return CWD;
+  return findRoot(CWD);
 }
 
 // â”€â”€â”€ tree renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -163,6 +157,9 @@ function renderRoot(map, absolutePath, visited, showExports) {
 
 async function cmdAnalyze(file, { depth = 5, full = false, root }) {
   const entry = resolve(root, file);
+  if (!existsSync(entry)) {
+    die(`File not found: ${entry}\n\nTip: run from your project root, or pass --root <dir>\nExample: depslice ${file} --root ./my-project`);
+  }
   const map = walk(entry, depth, full, new Set(), 0, root);
 
   if (full) {
@@ -270,6 +267,9 @@ async function cmdBenchmark(file, { depth = 5, root }) {
 
 async function cmdGraph(file, { depth = 5, format = "html", root }) {
   const entry = resolve(root, file);
+  if (!existsSync(entry)) {
+    die(`File not found: ${entry}\n\nTip: run from your project root, or pass --root <dir>\nExample: depslice ${file} --root ./my-project`);
+  }
   const map = walk(entry, depth, false, new Set(), 0, root);
   const { nodes, edges } = buildGraph(map, root);
 
@@ -369,7 +369,13 @@ async function main() {
   }
 
   const [rawCommand, ...rest] = process.argv.slice(2);
-  const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
+
+  // If the first arg is not a known command, treat it as a file → open graph
+  let command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
+  if (rawCommand && !KNOWN_COMMANDS.has(rawCommand)) {
+    rest.unshift(rawCommand);   // put it back as the file positional
+    command = "graph";
+  }
 
   if (!command || command === "--help" || command === "-h") {
     process.stdout.write(HELP);

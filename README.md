@@ -265,11 +265,14 @@ depslice benchmark src/index.ts --root /path/to/my-react-app
 
 ---
 
-## MCP server (Claude Desktop)
+## MCP server
 
-depslice can run as an MCP server so AI agents (Claude, etc.) can call it directly.
+depslice can run as an MCP server so AI agents (Claude, etc.) can call it directly.  
+It comes in two flavours: **local** (reads your files directly) and **remote** (hosted in the cloud, analyzes GitHub repos).
 
-### Setup
+---
+
+### Local MCP (Claude Desktop)
 
 Add this to your `claude_desktop_config.json`:
 
@@ -288,31 +291,64 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-Or if installed globally:
+Restart Claude Desktop after saving.
 
+### Install from Smithery
+
+depslice is available on [Smithery](https://smithery.ai/server/depslice) — install it in one click without editing any config file.
+
+---
+
+### Remote MCP (hosted, GitHub repos)
+
+The remote server runs in the cloud and lets Claude analyze **any public GitHub repo** without installing anything.
+
+**Connect Claude.ai:**
+
+Go to *Settings → Integrations → Add MCP server* and enter:
+```
+https://depslice.up.railway.app/mcp
+```
+
+**Or add to `claude_desktop_config.json`:**
 ```json
 {
   "mcpServers": {
-    "depslice": {
-      "command": "node",
-      "args": ["/path/to/depslice/index.js"],
-      "cwd": "/path/to/your/project"
+    "depslice-remote": {
+      "type": "http",
+      "url": "https://depslice.up.railway.app/mcp"
     }
   }
 }
 ```
 
-Restart Claude Desktop after saving.
+Once connected, Claude can analyze any public GitHub repo:
+
+> *"Map the dependencies of fastify/fastify"*  
+> *"What files depend on lib/hooks.js in expressjs/express?"*
+
+**Self-host:** deploy `server.js` to Railway, Render, or any Node.js platform:
+```bash
+# Railway (one command)
+railway up
+
+# Local test
+node server.js   # http://localhost:3000/mcp
+```
+
+---
 
 ### Available MCP tools
 
 | Tool | When the agent uses it |
 |---|---|
-| `analyze_feature` | Before reading files — loads full source of an entry point and all its dependencies |
-| `map_dependencies` | To understand project structure without loading source; also works with `onlyModified: true` |
-| `find_dependents` | Before modifying a shared file — returns every file that depends on it |
+| `analyze_feature` | Loads full source of an entry file and all its dependencies |
+| `map_dependencies` | Dependency structure without source; works with `onlyModified: true` |
+| `find_dependents` | Impact analysis — every file that imports a given file |
 
-All tools accept a `root` parameter (absolute path to the project being analyzed).
+All tools accept:
+- `root` — absolute path to a local project
+- `githubRepo` — GitHub URL or `owner/repo` shorthand (remote server only)
 
 ### Telling Claude to use depslice automatically
 

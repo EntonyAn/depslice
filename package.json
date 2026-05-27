@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "serve": "node server.js",
+    "serve:dev": "node --watch server.js"
   },
   "keywords": [
     "mcp",
@@ -26,6 +28,8 @@
   "files": [
     "src",
     "index.js",
+    "server.js",
+    "smithery.yaml",
     "CLAUDE.md",
     "README.md"
   ],
